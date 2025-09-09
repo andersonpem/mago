@@ -2,7 +2,6 @@ use indoc::indoc;
 use serde::Deserialize;
 use serde::Serialize;
 
-use mago_atom::Atom;
 use mago_atom::ascii_lowercase_atom;
 use mago_atom::empty_atom;
 use mago_codex::metadata::function_like::FunctionLikeKind;
@@ -15,14 +14,19 @@ use mago_reporting::Level;
 use mago_span::HasSpan;
 use mago_syntax::ast::Argument;
 use mago_syntax::ast::Attribute;
+use mago_syntax::ast::ClassLikeMemberSelector;
 use mago_syntax::ast::Expression;
 use mago_syntax::ast::FunctionCall;
 use mago_syntax::ast::FunctionLikeParameterList;
 use mago_syntax::ast::Identifier;
+use mago_syntax::ast::Instantiation;
+use mago_syntax::ast::MethodCall;
 use mago_syntax::ast::Node;
 use mago_syntax::ast::NodeKind;
 use mago_syntax::ast::Program;
 use mago_syntax::ast::Statement;
+use mago_syntax::ast::StaticMethodCall;
+use mago_syntax::ast::Variable;
 
 use crate::category::Category;
 use crate::context::LintContext;
@@ -366,10 +370,26 @@ impl ArgumentOrderRule {
         ctx: &mut LintContext<'_, 'arena>,
         expression: &Expression<'arena>,
         function_signatures: &std::collections::HashMap<&'arena str, Vec<&'arena str>>,
-        _class_constructors: &std::collections::HashMap<&'arena str, Vec<&'arena str>>,
+        class_constructors: &std::collections::HashMap<&'arena str, Vec<&'arena str>>,
     ) {
-        if let Expression::Call(mago_syntax::ast::Call::Function(function_call)) = expression {
-            self.check_function_call_with_signatures(ctx, function_call, function_signatures);
+        match expression {
+            // Function calls: myFunction(args...)
+            Expression::Call(mago_syntax::ast::Call::Function(function_call)) => {
+                self.check_function_call_with_signatures(ctx, function_call, function_signatures);
+            }
+            // Method calls: $obj->method(args...)
+            Expression::Call(mago_syntax::ast::Call::Method(method_call)) => {
+                self.check_method_call_with_codebase(ctx, method_call);
+            }
+            // Static method calls: Class::method(args...)
+            Expression::Call(mago_syntax::ast::Call::StaticMethod(static_call)) => {
+                self.check_static_method_call_with_codebase(ctx, static_call);
+            }
+            // Constructor calls: new Class(args...)
+            Expression::Instantiation(instantiation) => {
+                self.check_instantiation_with_signatures(ctx, instantiation, class_constructors);
+            }
+            _ => {}
         }
     }
 
@@ -552,6 +572,170 @@ impl ArgumentOrderRule {
             }
         }
         
+        None
+    }
+
+    /// Check method calls: $obj->method(args...)
+    fn check_method_call_with_codebase<'arena>(
+        &self,
+        ctx: &mut LintContext<'_, 'arena>,
+        method_call: &MethodCall<'arena>,
+    ) {
+        // Only check if there are named arguments
+        let named_args: Vec<_> = method_call
+            .argument_list
+            .arguments
+            .iter()
+            .filter_map(|arg| match arg {
+                Argument::Named(named) => Some(named),
+                _ => None,
+            })
+            .collect();
+
+        if named_args.len() < 2 {
+            return; // Need at least 2 named arguments to check order
+        }
+
+        let method_name = match &method_call.method {
+            ClassLikeMemberSelector::Identifier(identifier) => identifier.value,
+            _ => return, // Can't resolve complex method selectors yet
+        };
+
+        // Try to resolve the object type and find the method signature
+        // For now, we'll implement a basic version that looks for common patterns
+        if let Some(parameter_order) = self.lookup_method_from_object_type(ctx, method_call, method_name) {
+            let parameter_refs: Vec<&str> = parameter_order.iter().map(|s| s.as_str()).collect();
+            self.check_argument_order_against_expected(ctx, &named_args, &parameter_refs, "method signature");
+        }
+    }
+
+    /// Check static method calls: Class::method(args...)
+    fn check_static_method_call_with_codebase<'arena>(
+        &self,
+        ctx: &mut LintContext<'_, 'arena>,
+        static_call: &StaticMethodCall<'arena>,
+    ) {
+        // Only check if there are named arguments
+        let named_args: Vec<_> = static_call
+            .argument_list
+            .arguments
+            .iter()
+            .filter_map(|arg| match arg {
+                Argument::Named(named) => Some(named),
+                _ => None,
+            })
+            .collect();
+
+        if named_args.len() < 2 {
+            return; // Need at least 2 named arguments to check order
+        }
+
+        // Get class and method names
+        let class_name = match &static_call.class {
+            Expression::Identifier(identifier) => identifier.value(),
+            _ => return, // Can't resolve complex class expressions yet
+        };
+
+        let method_name = match &static_call.method {
+            ClassLikeMemberSelector::Identifier(identifier) => identifier.value,
+            _ => return, // Can't resolve complex method selectors yet
+        };
+
+        // Look up the method signature from codebase metadata
+        if let Some(parameter_order) = self.lookup_method_signature_from_codebase(ctx, class_name, method_name) {
+            let parameter_refs: Vec<&str> = parameter_order.iter().map(|s| s.as_str()).collect();
+            self.check_argument_order_against_expected(ctx, &named_args, &parameter_refs, "static method signature");
+        }
+    }
+
+    /// Check instantiation calls: new Class(args...)
+    fn check_instantiation_with_signatures<'arena>(
+        &self,
+        ctx: &mut LintContext<'_, 'arena>,
+        instantiation: &Instantiation<'arena>,
+        class_constructors: &std::collections::HashMap<&'arena str, Vec<&'arena str>>,
+    ) {
+        let Some(argument_list) = &instantiation.argument_list else {
+            return; // No arguments to check
+        };
+
+        // Only check if there are named arguments
+        let named_args: Vec<_> = argument_list
+            .arguments
+            .iter()
+            .filter_map(|arg| match arg {
+                Argument::Named(named) => Some(named),
+                _ => None,
+            })
+            .collect();
+
+        if named_args.len() < 2 {
+            return; // Need at least 2 named arguments to check order
+        }
+
+        // Get the class name
+        let class_name = match instantiation.class {
+            Expression::Identifier(identifier) => identifier.value(),
+            _ => return, // Can't resolve complex class expressions yet
+        };
+
+        // First check local constructor signatures (same file)
+        if let Some(parameter_order) = class_constructors.get(class_name) {
+            self.check_argument_order_against_expected(
+                ctx,
+                &named_args,
+                parameter_order,
+                "constructor signature",
+            );
+            return;
+        }
+
+        // Then check cross-file constructor signatures from codebase metadata
+        if let Some(parameter_order) = self.lookup_method_signature_from_codebase(ctx, class_name, "__construct") {
+            let parameter_refs: Vec<&str> = parameter_order.iter().map(|s| s.as_str()).collect();
+            self.check_argument_order_against_expected(
+                ctx,
+                &named_args,
+                &parameter_refs,
+                "constructor signature",
+            );
+        }
+    }
+
+    /// Try to resolve method signature from object type (simplified version)
+    fn lookup_method_from_object_type(
+        &self,
+        ctx: &LintContext<'_, '_>,
+        method_call: &MethodCall<'_>,
+        method_name: &str,
+    ) -> Option<Vec<String>> {
+        // This is a simplified implementation. In a full implementation, we would:
+        // 1. Analyze the object expression to determine its type
+        // 2. Look up the method in that class's metadata
+        // 3. Handle inheritance and trait usage
+        
+        // For now, let's handle some common patterns:
+        
+        // Pattern: $this->method() - look in current class context
+        if let Expression::Variable(Variable::Direct(var)) = &method_call.object {
+            if var.name == "$this" {
+                // Try to get current class context from scope
+                if let Some(current_class) = self.get_current_class_from_context(ctx) {
+                    return self.lookup_method_signature_from_codebase(ctx, &current_class, method_name);
+                }
+            }
+        }
+
+        // Pattern: $service->method() - could be dependency injection
+        // This would require more sophisticated type analysis
+        
+        None
+    }
+
+    /// Get current class context (simplified)
+    fn get_current_class_from_context(&self, _ctx: &LintContext<'_, '_>) -> Option<String> {
+        // This would need to be implemented by tracking the current class scope
+        // For now, return None as this requires more complex scope tracking
         None
     }
 }
