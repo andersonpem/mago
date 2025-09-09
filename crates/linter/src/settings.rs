@@ -28,6 +28,7 @@ pub struct RuleSettings<C: Config> {
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RulesSettings {
     pub ambiguous_function_call: RuleSettings<AmbiguousFunctionCallConfig>,
+    pub argument_order: RuleSettings<ArgumentOrderConfig>,
     pub array_style: RuleSettings<ArrayStyleConfig>,
     pub assert_description: RuleSettings<AssertDescriptionConfig>,
     pub assertion_style: RuleSettings<AssertionStyleConfig>,

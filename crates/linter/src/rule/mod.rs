@@ -138,6 +138,7 @@ macro_rules! define_rules {
 
 define_rules! {
     AmbiguousFunctionCall(ambiguous_function_call @ AmbiguousFunctionCallRule),
+    ArgumentOrder(argument_order @ ArgumentOrderRule),
     ArrayStyle(array_style @ ArrayStyleRule),
     AssertDescription(assert_description @ AssertDescriptionRule),
     AssertionStyle(assertion_style @ AssertionStyleRule),

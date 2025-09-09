@@ -1,4 +1,5 @@
 pub mod ambiguous_function_call;
+pub mod argument_order;
 pub mod array_style;
 pub mod assertion_style;
 pub mod block_statement;
@@ -17,6 +18,7 @@ pub mod no_trailing_space;
 pub mod trait_name;
 
 pub use ambiguous_function_call::*;
+pub use argument_order::*;
 pub use array_style::*;
 pub use assertion_style::*;
 pub use block_statement::*;
