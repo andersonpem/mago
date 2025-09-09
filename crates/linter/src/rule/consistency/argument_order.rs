@@ -2,6 +2,10 @@ use indoc::indoc;
 use serde::Deserialize;
 use serde::Serialize;
 
+use mago_atom::Atom;
+use mago_atom::ascii_lowercase_atom;
+use mago_atom::empty_atom;
+use mago_codex::metadata::function_like::FunctionLikeKind;
 use mago_fixer::SafetyClassification;
 use mago_php_version::PHPVersion;
 use mago_php_version::PHPVersionRange;
@@ -290,9 +294,16 @@ impl ArgumentOrderRule {
             _ => return, // Can't resolve complex function expressions
         };
 
-        // Check if we have the function signature
+        // First check local signatures (same file)
         if let Some(parameter_order) = function_signatures.get(function_name) {
             self.check_argument_order_against_expected(ctx, &named_args, parameter_order, "function signature");
+            return;
+        }
+
+        // Then check cross-file signatures from codebase metadata
+        if let Some(parameter_order) = self.lookup_function_signature_from_codebase(ctx, function_name) {
+            let parameter_refs: Vec<&str> = parameter_order.iter().map(|s| s.as_str()).collect();
+            self.check_argument_order_against_expected(ctx, &named_args, &parameter_refs, "function signature");
         }
     }
 
@@ -327,12 +338,24 @@ impl ArgumentOrderRule {
             Identifier::FullyQualified(fully_qualified) => fully_qualified.value,
         };
 
-        // Check if we have the class constructor signature
+        // First check local constructor signatures (same file)
         if let Some(parameter_order) = class_constructors.get(class_name) {
             self.check_argument_order_against_expected(
                 ctx,
                 &named_args,
                 parameter_order,
+                "attribute constructor signature",
+            );
+            return;
+        }
+
+        // Then check cross-file constructor signatures from codebase metadata
+        if let Some(parameter_order) = self.lookup_method_signature_from_codebase(ctx, class_name, "__construct") {
+            let parameter_refs: Vec<&str> = parameter_order.iter().map(|s| s.as_str()).collect();
+            self.check_argument_order_against_expected(
+                ctx,
+                &named_args,
+                &parameter_refs,
                 "attribute constructor signature",
             );
         }
@@ -476,5 +499,59 @@ impl ArgumentOrderRule {
             },
             _ => "/* complex expression */".to_string(), // Fallback for complex expressions
         }
+    }
+
+    /// Look up function signature from codebase metadata
+    fn lookup_function_signature_from_codebase(&self, ctx: &LintContext<'_, '_>, function_name: &str) -> Option<Vec<String>> {
+        let codebase = ctx.codebase?;
+        
+        // Convert function name to lowercase Atom for lookup (PHP functions are case-insensitive)
+        let function_atom = ascii_lowercase_atom(function_name);
+        
+        // Look for global function (scope_id is empty)
+        let empty_scope = empty_atom();
+        if let Some(function_metadata) = codebase.function_likes.get(&(empty_scope, function_atom)) {
+            if function_metadata.kind == FunctionLikeKind::Function {
+                let parameter_names: Vec<String> = function_metadata
+                    .parameters
+                    .iter()
+                    .map(|param| {
+                        // Remove the $ prefix from parameter names
+                        let full_name = param.name.0.as_str();
+                        full_name.strip_prefix('$').unwrap_or(full_name).to_string()
+                    })
+                    .collect();
+                return Some(parameter_names);
+            }
+        }
+        
+        None
+    }
+
+    /// Look up method signature from codebase metadata
+    fn lookup_method_signature_from_codebase(&self, ctx: &LintContext<'_, '_>, class_name: &str, method_name: &str) -> Option<Vec<String>> {
+        let codebase = ctx.codebase?;
+        
+        // Convert names to lowercase Atoms for lookup (PHP names are case-insensitive)
+        let class_atom = ascii_lowercase_atom(class_name);
+        let method_atom = ascii_lowercase_atom(method_name);
+        
+        // Look for method in the specified class
+        if let Some(method_metadata) = codebase.function_likes.get(&(class_atom, method_atom)) {
+            if method_metadata.kind == FunctionLikeKind::Method {
+                let parameter_names: Vec<String> = method_metadata
+                    .parameters
+                    .iter()
+                    .map(|param| {
+                        // Remove the $ prefix from parameter names
+                        let full_name = param.name.0.as_str();
+                        full_name.strip_prefix('$').unwrap_or(full_name).to_string()
+                    })
+                    .collect();
+                return Some(parameter_names);
+            }
+        }
+        
+        None
     }
 }

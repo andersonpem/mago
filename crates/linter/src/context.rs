@@ -1,5 +1,6 @@
 use bumpalo::Bump;
 use mago_collector::Collector;
+use mago_codex::metadata::CodebaseMetadata;
 use mago_database::file::File;
 use mago_names::ResolvedNames;
 use mago_php_version::PHPVersion;
@@ -17,6 +18,7 @@ pub struct LintContext<'ctx, 'arena> {
     pub resolved_names: &'ctx ResolvedNames<'arena>,
     pub collector: Collector<'ctx, 'arena>,
     pub scope: ScopeStack<'arena>,
+    pub codebase: Option<&'ctx CodebaseMetadata>,
 }
 
 impl<'ctx, 'arena> LintContext<'ctx, 'arena> {
@@ -28,7 +30,19 @@ impl<'ctx, 'arena> LintContext<'ctx, 'arena> {
         resolved_names: &'ctx ResolvedNames<'arena>,
         collector: Collector<'ctx, 'arena>,
     ) -> Self {
-        Self { php_version, arena, integration, source_file, resolved_names, collector, scope: ScopeStack::new() }
+        Self { php_version, arena, integration, source_file, resolved_names, collector, scope: ScopeStack::new(), codebase: None }
+    }
+
+    pub fn with_codebase(
+        php_version: PHPVersion,
+        arena: &'arena Bump,
+        integration: IntegrationSet,
+        source_file: &'ctx File,
+        resolved_names: &'ctx ResolvedNames<'arena>,
+        collector: Collector<'ctx, 'arena>,
+        codebase: &'ctx CodebaseMetadata,
+    ) -> Self {
+        Self { php_version, arena, integration, source_file, resolved_names, collector, scope: ScopeStack::new(), codebase: Some(codebase) }
     }
 
     /// Checks if a name at a given position is imported.

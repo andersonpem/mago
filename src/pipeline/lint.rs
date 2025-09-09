@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use mago_codex::metadata::CodebaseMetadata;
+use mago_codex::reference::SymbolReferences;
 use mago_database::ReadDatabase;
 use mago_linter::Linter;
 use mago_linter::registry::RuleRegistry;
@@ -11,6 +13,8 @@ use mago_semantics::SemanticsChecker;
 use mago_syntax::parser::parse_file;
 
 use crate::error::Error;
+use crate::pipeline::ParallelPipeline;
+use crate::pipeline::Reducer;
 use crate::pipeline::StatelessParallelPipeline;
 use crate::pipeline::StatelessReducer;
 
@@ -25,6 +29,22 @@ pub struct LintResultReducer;
 
 impl StatelessReducer<IssueCollection, IssueCollection> for LintResultReducer {
     fn reduce(&self, results: Vec<IssueCollection>) -> Result<IssueCollection, Error> {
+        let mut final_issues = IssueCollection::new();
+        for issues in results {
+            final_issues.extend(issues);
+        }
+
+        Ok(final_issues)
+    }
+}
+
+impl Reducer<IssueCollection, IssueCollection> for LintResultReducer {
+    fn reduce(
+        &self,
+        _codebase: CodebaseMetadata,
+        _symbol_references: SymbolReferences,
+        results: Vec<IssueCollection>,
+    ) -> Result<IssueCollection, Error> {
         let mut final_issues = IssueCollection::new();
         for issues in results {
             final_issues.extend(issues);
@@ -70,25 +90,32 @@ pub fn run_lint_pipeline(database: ReadDatabase, context: LintContext) -> Result
 /// This pipeline compiles a global `CodebaseMetadata` and provides it to each
 /// linting task, enabling rules that require cross-file awareness.
 fn run_full_pipeline(database: ReadDatabase, context: LintContext) -> Result<IssueCollection, Error> {
-    StatelessParallelPipeline::new(PROGRESS_BAR_THEME, database, context, Box::new(LintResultReducer)).run(
-        |context, arena, file| {
-            let (program, parsing_error) = parse_file(arena, &file);
-            let resolved_names = NameResolver::new(arena).resolve(program);
+    let pipeline = ParallelPipeline::new(
+        PROGRESS_BAR_THEME,
+        database,
+        CodebaseMetadata::default(),
+        SymbolReferences::new(),
+        context,
+        Box::new(LintResultReducer),
+    );
 
-            let mut issues = IssueCollection::new();
-            if let Some(error) = parsing_error {
-                issues.push(Issue::from(&error));
-            }
+    pipeline.run(|context, arena, file, codebase| {
+        let (program, parsing_error) = parse_file(arena, &file);
+        let resolved_names = NameResolver::new(arena).resolve(program);
 
-            let semantics_checker = SemanticsChecker::new(context.php_version);
-            let linter = Linter::from_registry(arena, context.registry, context.php_version);
+        let mut issues = IssueCollection::new();
+        if let Some(error) = parsing_error {
+            issues.push(Issue::from(&error));
+        }
 
-            issues.extend(semantics_checker.check(&file, program, &resolved_names));
-            issues.extend(linter.lint(&file, program, &resolved_names));
+        let semantics_checker = SemanticsChecker::new(context.php_version);
+        let linter = Linter::from_registry(arena, context.registry.clone(), context.php_version);
 
-            Ok(issues)
-        },
-    )
+        issues.extend(semantics_checker.check(&file, program, &resolved_names));
+        issues.extend(linter.lint_with_codebase(&file, program, &resolved_names, &codebase));
+
+        Ok(issues)
+    })
 }
 
 /// Executes a fast, stateless pipeline for semantic checks only.

@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use bumpalo::Bump;
 use mago_collector::Collector;
+use mago_codex::metadata::CodebaseMetadata;
 use mago_database::file::File;
 use mago_names::ResolvedNames;
 use mago_php_version::PHPVersion;
@@ -87,6 +88,33 @@ impl<'arena> Linter<'arena> {
             source_file,
             resolved_names,
             collector,
+        );
+
+        walk(Node::Program(program), &mut context, &self.registry);
+
+        context.collector.finish()
+    }
+
+    pub fn lint_with_codebase<'ctx, 'ast>(
+        &self,
+        source_file: &'ctx File,
+        program: &'ast Program<'arena>,
+        resolved_names: &'ast ResolvedNames<'arena>,
+        codebase: &'ctx CodebaseMetadata,
+    ) -> IssueCollection {
+        let mut collector = Collector::new(self.arena, source_file, program, COLLECTOR_CATEGORY);
+
+        // Set legacy rule code mappings for compatibility with the old linter.
+        collector.set_aliases(LEGACY_RULE_CODE_MAPPINGS);
+
+        let mut context = LintContext::with_codebase(
+            self.php_version,
+            self.arena,
+            self.registry.integrations(),
+            source_file,
+            resolved_names,
+            collector,
+            codebase,
         );
 
         walk(Node::Program(program), &mut context, &self.registry);

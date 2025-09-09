@@ -23,6 +23,8 @@ mago-casing = { workspace = true }
 mago-names = { workspace = true }
 mago-php-version = { workspace = true }
 mago-collector = { workspace = true }
+mago-codex = { workspace = true }
+mago-atom = { workspace = true }
 ahash = { workspace = true }
 serde = { workspace = true }
 regex = { workspace = true }
