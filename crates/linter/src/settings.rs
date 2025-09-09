@@ -48,6 +48,7 @@ pub struct RulesSettings {
     pub literal_named_argument: RuleSettings<LiteralNamedArgumentConfig>,
     pub loop_does_not_iterate: RuleSettings<LoopDoesNotIterateConfig>,
     pub lowercase_keyword: RuleSettings<LowercaseKeywordConfig>,
+    pub named_argument_ordering: RuleSettings<NamedArgumentOrderingConfig>,
     pub no_debug_symbols: RuleSettings<NoDebugSymbolsConfig>,
     pub no_request_variable: RuleSettings<NoRequestVariableConfig>,
     pub no_shell_execute_string: RuleSettings<NoShellExecuteStringConfig>,

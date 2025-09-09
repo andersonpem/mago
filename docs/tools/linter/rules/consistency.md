@@ -21,6 +21,7 @@ This document details the rules available in the `Consistency` category.
 | Interface Name | [`interface-name`](#interface-name) |
 | Lowercase Keyword | [`lowercase-keyword`](#lowercase-keyword) |
 | Lowercase Type Hint | [`lowercase-type-hint`](#lowercase-type-hint) |
+| Named Argument Ordering | [`named-argument-ordering`](#named-argument-ordering) |
 | No Alias Function | [`no-alias-function`](#no-alias-function) |
 | No Hash Comment | [`no-hash-comment`](#no-hash-comment) |
 | No Php Tag Terminator | [`no-php-tag-terminator`](#no-php-tag-terminator) |
@@ -530,6 +531,48 @@ function example(int $param): void {
 function example(Int $param): VOID {
     return;
 }
+```
+
+
+## <a id="named-argument-ordering"></a>`named-argument-ordering`
+
+Enforces that named arguments are ordered alphabetically by parameter name.
+
+This improves code readability and consistency by ensuring that named arguments
+follow a predictable order, making it easier to scan and understand function calls
+with multiple named parameters.
+
+### Requirements
+
+- **PHP Version:** `8.0+`
+
+### Configuration
+
+| Option  | Type    | Default   |
+| :------ | :------ | :-------- |
+| `enabled` | `boolean` | `true`    |
+| `level`   | `string`  | `"warning"` |
+
+### Examples
+
+#### Correct code
+
+```php
+<?php
+
+function configure(string $host, int $port, bool $ssl, string $username) {}
+
+configure(host: 'localhost', port: 8080, ssl: true, username: 'admin');
+```
+
+#### Incorrect code
+
+```php
+<?php
+
+function configure(string $host, int $port, bool $ssl, string $username) {}
+
+configure(username: 'admin', host: 'localhost', ssl: true, port: 8080);
 ```
 
 
