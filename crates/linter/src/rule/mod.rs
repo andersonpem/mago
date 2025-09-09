@@ -244,5 +244,6 @@ define_rules! {
     StrictAssertions(strict_assertions @ StrictAssertionsRule),
     NoRequestAll(no_request_all @ NoRequestAllRule),
     MiddlewareInRoutes(middleware_in_routes @ MiddlewareInRoutesRule),
+    SlowArrayFunctionInLoop(slow_array_function_in_loop @ SlowArrayFunctionInLoopRule),
     UseCompoundAssignment(use_compound_assignment @ UseCompoundAssignmentRule),
 }

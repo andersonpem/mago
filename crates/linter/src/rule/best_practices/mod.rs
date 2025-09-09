@@ -18,6 +18,7 @@ pub mod psl_randomness_functions;
 pub mod psl_regex_functions;
 pub mod psl_sleep_functions;
 pub mod psl_string_functions;
+pub mod slow_array_function_in_loop;
 pub mod use_compound_assignment;
 
 pub use combine_consecutive_issets::*;
@@ -40,4 +41,5 @@ pub use psl_randomness_functions::*;
 pub use psl_regex_functions::*;
 pub use psl_sleep_functions::*;
 pub use psl_string_functions::*;
+pub use slow_array_function_in_loop::*;
 pub use use_compound_assignment::*;

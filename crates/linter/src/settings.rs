@@ -134,6 +134,7 @@ pub struct RulesSettings {
     pub strict_assertions: RuleSettings<StrictAssertionsConfig>,
     pub no_request_all: RuleSettings<NoRequestAllConfig>,
     pub middleware_in_routes: RuleSettings<MiddlewareInRoutesConfig>,
+    pub slow_array_function_in_loop: RuleSettings<SlowArrayFunctionInLoopConfig>,
     pub use_compound_assignment: RuleSettings<UseCompoundAssignmentConfig>,
 }
 

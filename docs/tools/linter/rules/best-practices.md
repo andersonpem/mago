@@ -29,6 +29,7 @@ This document details the rules available in the `BestPractices` category.
 | Psl Regex Functions | [`psl-regex-functions`](#psl-regex-functions) |
 | Psl Sleep Functions | [`psl-sleep-functions`](#psl-sleep-functions) |
 | Psl String Functions | [`psl-string-functions`](#psl-string-functions) |
+| Slow Array Function in Loop | [`slow-array-function-in-loop`](#slow-array-function-in-loop) |
 | Use Compound Assignment | [`use-compound-assignment`](#use-compound-assignment) |
 
 
@@ -882,6 +883,74 @@ $capitalized = Psl\Str\capitalize($string);
 <?php
 
 $capitalized = ucfirst($string);
+```
+
+
+## <a id="slow-array-function-in-loop"></a>`slow-array-function-in-loop`
+
+Detects performance anti-patterns where slow array functions are used inside loops,
+causing unnecessary computational overhead and high CPU usage.
+
+This rule identifies two main patterns:
+1. Array merging in loops - `array_merge()` called repeatedly in loop iterations
+2. Count function in loop conditions - `count()`, `sizeof()` called in loop conditions
+
+Array merging in loops has O(n²) complexity and can be 10-100x slower than collecting
+arrays and merging once. Count functions in loop conditions cause unnecessary overhead
+when the array doesn't change.
+
+
+
+### Configuration
+
+| Option | Type | Default |
+| :--- | :--- | :--- |
+| `enabled` | `boolean` | `true` |
+| `level` | `string` | `"warning"` |
+| `detect-array-merge` | `boolean` | `true` |
+| `detect-count-functions` | `boolean` | `true` |
+| `detect-in-nested-loops` | `boolean` | `true` |
+| `auto-fix-array-merge` | `boolean` | `true` |
+| `auto-fix-count-in-loop` | `boolean` | `true` |
+| `min-loop-iterations-threshold` | `integer` | `2` |
+| `require-safe-count-caching` | `boolean` | `true` |
+| `max-auto-fix-complexity` | `integer` | `10` |
+
+### Examples
+
+#### Correct code
+
+```php
+<?php
+
+// Collect arrays, then merge once
+$options = [];
+foreach ($sources as $source) {
+    $options[] = $source->getOptions();
+}
+$options = array_merge(...$options);
+
+// Cache count result
+for ($i = 0, $count = count($array); $i < $count; $i++) {
+    echo $array[$i];
+}
+```
+
+#### Incorrect code
+
+```php
+<?php
+
+// Slow array merging in loop
+$options = [];
+foreach ($sources as $source) {
+    $options = array_merge($options, $source->getOptions());
+}
+
+// Count called on every iteration
+for ($i = 0; $i < count($array); $i++) {
+    echo $array[$i];
+}
 ```
 
 
